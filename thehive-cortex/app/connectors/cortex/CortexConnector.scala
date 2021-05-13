@@ -1,24 +1,20 @@
 package connectors.cortex
 
-import play.api.libs.concurrent.AkkaGuiceSupport
-import play.api.{ Configuration, Environment, Logger }
-
 import connectors.ConnectorModule
 import connectors.cortex.controllers.CortexCtrl
 import connectors.cortex.services.JobReplicateActor
+import play.api.Logger
+import play.api.libs.concurrent.AkkaGuiceSupport
 
-class CortexConnector(
-    environment: Environment,
-    configuration: Configuration) extends ConnectorModule with AkkaGuiceSupport {
+class CortexConnector extends ConnectorModule with AkkaGuiceSupport {
   private[CortexConnector] lazy val logger = Logger(getClass)
 
-  def configure() {
+  override def configure() {
     try {
       registerController[CortexCtrl]
       bindActor[JobReplicateActor]("JobReplicateActor")
-    }
-    catch {
-      case t: Throwable ⇒ logger.error("Cortex connector is disabled because its configuration is invalid", t)
+    } catch {
+      case t: Throwable => logger.error("Cortex connector is disabled because its configuration is invalid", t)
     }
   }
 }

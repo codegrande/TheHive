@@ -1,7 +1,7 @@
 (function () {
     'use strict';
     angular.module('theHiveControllers').controller('CaseObservablesCtrl',
-        function ($scope, $q, $state, $stateParams, $uibModal, StreamSrv, CaseTabsSrv, PSearchSrv, CaseArtifactSrv, NotificationSrv, AnalyzerSrv, CortexSrv, ObservablesUISrv, VersionSrv, Tlp) {
+        function ($scope, $q, $state, $stateParams, $filter, $uibModal, StreamSrv, CaseTabsSrv, PSearchSrv, CaseArtifactSrv, NotificationSrv, AnalyzerSrv, CortexSrv, ObservablesUISrv, VersionSrv, Tlp) {
 
             CaseTabsSrv.activateTab($state.current.data.tab);
 
@@ -9,6 +9,7 @@
             $scope.uiSrv = ObservablesUISrv;
             $scope.caseId = $stateParams.caseId;
             $scope.showText = false;
+            $scope.obsResponders = null;
 
             $scope.uiSrv.initContext($scope.caseId);
             $scope.searchForm = {
@@ -68,6 +69,16 @@
             $scope.$watchCollection('artifacts.pageSize', function (newValue) {
                 $scope.uiSrv.setPageSize(newValue);
             });
+
+            $scope.sortBy = function(field) {
+                if($scope.artifacts.sort.substr(1) !== field) {
+                    $scope.artifacts.sort = '+' + field;
+                } else {
+                    $scope.artifacts.sort = ($scope.artifacts.sort === '+' + field) ? '-'+field : '+'+field;
+                }
+
+                $scope.artifacts.update();
+            }
 
             $scope.keys = function(obj) {
                 return _.keys(obj || {});
@@ -326,7 +337,15 @@
                     animation: 'true',
                     templateUrl: 'views/partials/observables/observable.creation.html',
                     controller: 'ObservableCreationCtrl',
-                    size: 'lg'
+                    size: 'lg',
+                    resolve: {
+                        params: function() {
+                            return null;
+                        },
+                        tags: function() {
+                            return [];
+                        }
+                    }
                 });
 
             };
@@ -635,7 +654,7 @@
             $scope.showReport = function(observable, analyzerId) {
                 CortexSrv.getJobs($scope.caseId, observable.id, analyzerId, 1)
                     .then(function(response) {
-                        return CortexSrv.getJob(response.data[0].id)
+                        return CortexSrv.getJob(response.data[0].id);
                     })
                     .then(function(response){
                         var job = response.data;
@@ -655,7 +674,7 @@
                             size: 'max',
                             resolve: {
                                 report: function() {
-                                    return report
+                                    return report;
                                 },
                                 observable: function() {
                                     return observable;
@@ -663,10 +682,39 @@
                             }
                         });
                     })
-                    .catch(function(err) {
+                    .catch(function(/*err*/) {
                         NotificationSrv.error('Unable to fetch the analysis report');
-                    })
-            }
+                    });
+            };
+
+            $scope.getObsResponders = function(observable, force) {
+                if(!force && $scope.obsResponders !== null) {
+                   return;
+                }
+
+                $scope.obsResponders = null;
+                CortexSrv.getResponders('case_artifact', observable.id)
+                  .then(function(responders) {
+                      $scope.obsResponders = responders;
+                      return CortexSrv.promntForResponder(responders);
+                  })
+                  .then(function(response) {
+                      if(response && _.isString(response)) {
+                          NotificationSrv.log(response, 'warning');
+                      } else {
+                          return CortexSrv.runResponder(response.id, response.name, 'case_artifact', _.pick(observable, 'id'));
+                      }
+                  })
+                  .then(function(response){
+                      var data = '['+$filter('fang')(observable.data || observable.attachment.name)+']';
+                      NotificationSrv.log(['Responder', response.data.responderName, 'started successfully on observable', data].join(' '), 'success');
+                  })
+                  .catch(function(err) {
+                      if(err && !_.isString(err)) {
+                          NotificationSrv.error('observablesList', err.data, err.status);
+                      }
+                  });
+            };
         }
     )
     .controller('JobReportModalCtrl', function($uibModalInstance, report, observable) {
@@ -674,7 +722,7 @@
         this.observable = observable;
         this.close = function() {
             $uibModalInstance.dismiss();
-        }
+        };
     });
 
 })();

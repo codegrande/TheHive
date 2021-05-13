@@ -1,7 +1,7 @@
 (function() {
     'use strict';
 
-    angular.module('theHiveControllers').controller('CaseDetailsCtrl', function($scope, $state, $uibModal, CaseTabsSrv, UserInfoSrv, PSearchSrv) {
+    angular.module('theHiveControllers').controller('CaseDetailsCtrl', function($scope, $state, $uibModal, CaseTabsSrv, UserInfoSrv, TagSrv, PSearchSrv) {
 
         CaseTabsSrv.activateTab($state.current.data.tab);
 
@@ -25,12 +25,23 @@
                         '_parent': {
                             '_type': 'case_task',
                             '_query': {
-                                '_parent': {
-                                    '_type': 'case',
-                                    '_query': {
-                                        '_id': $scope.caseId
+                                _and: [
+                                    {
+                                        '_parent': {
+                                            '_type': 'case',
+                                            '_query': {
+                                                '_id': $scope.caseId
+                                            }
+                                        }
+                                    },
+                                    {
+                                        _not: {
+                                            status: 'Cancel'
+                                        }
                                     }
-                                }
+                                ]
+
+
                             }
                         }
                     }
@@ -38,6 +49,31 @@
             },
             pageSize: 100,
             nparent: 1
+        });
+
+        $scope.actions = PSearchSrv(null, 'connector/cortex/action', {
+            scope: $scope,
+            streamObjectType: 'action',
+            filter: {
+                _and: [
+                    {
+                        _not: {
+                            status: 'Deleted'
+                        }
+                    }, {
+                        objectType: 'case'
+                    }, {
+                        objectId: $scope.caseId
+                    }
+                ]
+            },
+            sort: ['-startDate'],
+            pageSize: 100,
+            guard: function(updates) {
+                return _.find(updates, function(item) {
+                    return (item.base.object.objectType === 'case') && (item.base.object.objectId === $scope.caseId);
+                }) !== undefined;
+            }
         });
 
         $scope.hasNoMetrics = function(caze) {
@@ -70,8 +106,12 @@
         $scope.openAttachment = function(attachment) {
             $state.go('app.case.tasks-item', {
                 caseId: $scope.caze.id,
-                itemId: attachment.case_task.id
+                itemId: attachment.case_task ? attachment.case_task.id : attachment._parent
             });
+        };
+
+        $scope.getCaseTags = function(query) {
+            return TagSrv.fromCases(query);
         };
     });
 
@@ -83,13 +123,13 @@
                 return {
                     name: name,
                     order: definition.order
-                }
+                };
             }), function(item){
                 return item.order;
             }), 'name');
 
             return result;
-        }
+        };
 
         $scope.getCustomFieldName = function(fieldDef) {
             return 'customFields.' + fieldDef.reference + '.' + fieldDef.type;
@@ -130,9 +170,13 @@
             });
         };
 
+        $scope.keys = function(obj) {
+            return _.keys(obj);
+        };
+
         $scope.updateCustomFieldsList();
 
-        $scope.$on('case:refresh-custom-fields', function() {            
+        $scope.$on('case:refresh-custom-fields', function() {
             $scope.updateCustomFieldsList();
         });
     });

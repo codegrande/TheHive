@@ -1,7 +1,7 @@
 (function() {
     'use strict';
     angular.module('theHiveServices')
-        .factory('CasesUISrv', function($q, localStorageService, Severity, Tlp) {
+        .factory('CasesUISrv', function($q, localStorageService, Severity, Tlp, UiSettingsSrv) {
             var defaultFilter = {
                 status: {
                     field: 'status',
@@ -88,7 +88,7 @@
                 },
                 currentState: null,
                 currentPageSize: null,
-
+                useAndForCaseTagsFilter: UiSettingsSrv.useAndForCaseTagsFilter() ? ' AND ' : ' OR ',
                 initContext: function(state) {
                     var storedContext = localStorageService.get('cases-section');
                     if (storedContext) {
@@ -165,11 +165,12 @@
 
                     // Prepare the filter value
                     if (field === 'keyword') {
-                        query = value;
+                        query = value.replace(/"/gi, '\\"');
                     } else if (angular.isArray(value) && value.length > 0) {
+                        var useAndForCaseTagsFilter = UiSettingsSrv.useAndForCaseTagsFilter() ? ' AND ' : ' OR ';
                         query = _.map(value, function(val) {
-                            return field + ':"' + convertFn(val.text) + '"';
-                        }).join(' OR ');
+                            return field + ':"' + convertFn(val.text.replace(/"/gi, '\\"')) + '"';
+                        }).join(field === 'tags' ? useAndForCaseTagsFilter : ' OR ');
                         query = '(' + query + ')';
                     } else if (filterDef.type === 'date') {
                         var fromDate = value.from ? moment(value.from).hour(0).minutes(0).seconds(0).valueOf() : '*',
@@ -178,7 +179,7 @@
                         query = field + ':[ ' + fromDate + ' TO ' + toDate + ' ]';
 
                     } else {
-                        query = field + ':' + convertFn(value);
+                        query = field + ':' + convertFn(value.replace(/"/gi, '\\"'));
                     }
 
                     factory.filters[field] = {

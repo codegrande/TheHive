@@ -3,7 +3,7 @@
 
     angular
         .module('theHiveControllers')
-        .controller('DashboardViewCtrl', function($scope, $q, $timeout, $uibModal, AuthenticationSrv, DashboardSrv, NotificationSrv, ModalUtilsSrv, UtilsSrv, dashboard, metadata) {
+        .controller('DashboardViewCtrl', function($scope, $q, $interval, $timeout, $uibModal, AuthenticationSrv, DashboardSrv, NotificationSrv, ModalUtilsSrv, UtilsSrv, dashboard, metadata) {
             var self = this;
 
             this.currentUser = AuthenticationSrv.currentUser;
@@ -12,6 +12,8 @@
             this.metadata = metadata;
             this.toolbox = DashboardSrv.toolbox;
             this.dashboardPeriods = DashboardSrv.dashboardPeriods;
+            this.autoRefresh = null;
+            this.authRefreshRunner = null;
 
             this.buildDashboardPeriodFilter = function(period) {
                 return period === 'custom' ?
@@ -35,14 +37,31 @@
 
             this.loadDashboard(dashboard);
 
+            $scope.$watch('$vm.autoRefresh', function(value) {
+                if(value === self.authRefreshRunner || self.options.editLayout === true) {
+                    return;
+                }
+
+                if(value === null) {
+                    $interval.cancel(self.authRefreshRunner);
+                } else {
+                    $interval.cancel(self.authRefreshRunner);
+                    self.authRefreshRunner = $interval(function() {
+                        $scope.$broadcast('refresh-chart', self.periodFilter);
+                    }, value * 1000);
+                }
+            });
+
+
+
             this.canEditDashboard = function() {
                 return (this.createdBy === this.currentUser.id) ||
                     (this.dashboardStatus = 'Shared' && AuthenticationSrv.isAdmin(this.currentUser));
-            }
+            };
 
             this.options = {
                 dashboardAllowedTypes: ['container'],
-                containerAllowedTypes: ['bar', 'line', 'donut', 'counter', 'multiline'],
+                containerAllowedTypes: ['bar', 'line', 'donut', 'counter', 'text', 'multiline'],
                 maxColumns: 3,
                 cls: DashboardSrv.typeClasses,
                 labels: {
@@ -51,6 +70,7 @@
                     donut: 'Donut',
                     line: 'Line',
                     counter: 'Counter',
+                    text: 'Text',
                     multiline: 'Multi Lines'
                 },
                 editLayout: !_.find(this.definition.items, function(row) {
@@ -63,7 +83,7 @@
                 this.periodFilter = this.buildDashboardPeriodFilter(period);
 
                 $scope.$broadcast('refresh-chart', this.periodFilter);
-            }
+            };
 
             this.removeContainer = function(index) {
                 var row = this.definition.items[index];
@@ -76,28 +96,28 @@
                     promise = ModalUtilsSrv.confirm('Remove widget', 'Are you sure you want to remove this item', {
                         okText: 'Yes, remove it',
                         flavor: 'danger'
-                    })
+                    });
                 }
 
                 promise.then(function() {
-                    self.definition.items.splice(index, 1)
+                    self.definition.items.splice(index, 1);
                 });
-            }
+            };
 
             this.saveDashboard = function() {
                 var copy = _.pick(this.dashboard, 'title', 'description', 'status');
                 copy.definition = angular.toJson(this.definition);
 
                 DashboardSrv.update(this.dashboard.id, copy)
-                    .then(function(response) {
+                    .then(function(/*response*/) {
                         self.options.editLayout = false;
                         self.resizeCharts();
                         NotificationSrv.log('The dashboard has been successfully updated', 'success');
                     })
                     .catch(function(err) {
                         NotificationSrv.error('DashboardEditCtrl', err.data, err.status);
-                    })
-            }
+                    });
+            };
 
             this.removeItem = function(rowIndex, colIndex) {
 
@@ -113,9 +133,9 @@
                     }, 0);
                 });
 
-            }
+            };
 
-            this.itemInserted = function(item, rows, rowIndex, index) {
+            this.itemInserted = function(item, rows/*, rowIndex, index*/) {
                 if(!item.id){
                     item.id = UtilsSrv.guid();
                 }
@@ -132,15 +152,15 @@
                 }
 
                 return item;
-            }
+            };
 
             this.itemDragStarted = function(colIndex, row) {
                 row.items.splice(colIndex, 1);
-            }
+            };
 
             this.exportDashboard = function() {
                 DashboardSrv.exportDashboard(this.dashboard);
-            }
+            };
 
             this.resizeCharts = function() {
                 $timeout(function() {

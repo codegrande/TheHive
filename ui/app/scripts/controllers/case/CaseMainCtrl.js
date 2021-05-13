@@ -1,9 +1,10 @@
 (function() {
     'use strict';
     angular.module('theHiveControllers').controller('CaseMainCtrl',
-        function($scope, $rootScope, $state, $stateParams, $q, $uibModal, CaseTabsSrv, CaseSrv, MetricsCacheSrv, UserInfoSrv, MispSrv, StreamSrv, StreamStatSrv, NotificationSrv, UtilsSrv, CaseResolutionStatus, CaseImpactStatus, caze) {
+        function($scope, $rootScope, $state, $stateParams, $q, $uibModal, CaseTabsSrv, CaseSrv, MetricsCacheSrv, UserInfoSrv, MispSrv, StreamSrv, StreamStatSrv, NotificationSrv, UtilsSrv, CaseResolutionStatus, CaseImpactStatus, CortexSrv, caze) {
             $scope.CaseResolutionStatus = CaseResolutionStatus;
             $scope.CaseImpactStatus = CaseImpactStatus;
+            $scope.caseResponders = null;
 
             var caseId = $stateParams.caseId;
             if (!$rootScope.currentCaseId) {
@@ -51,7 +52,11 @@
             CaseSrv.links({
                 caseId: $scope.caseId
             }, function(data) {
-                $scope.links = data;
+                $scope.links = _.map(data, function(item){
+                  item.linksCount = item.linkedWith.length || 0;
+
+                  return item;
+                });
 
                 if (data.length > 0) {
                     $scope.newestLink = data[0];
@@ -127,6 +132,15 @@
                 field: 'status'
             });
 
+            $scope.alerts = StreamStatSrv({
+                scope: $scope,
+                rootId: caseId,
+                query: { 'case': caseId },
+                result: {},
+                objectType: 'alert',
+                field: 'type'
+            });
+
             $scope.$on('tasks:task-removed', function(event, task) {
                 CaseTabsSrv.removeTab('task-' + task.id);
             });
@@ -195,7 +209,12 @@
                     scope: $scope,
                     templateUrl: 'views/partials/case/case.close.html',
                     controller: 'CaseCloseModalCtrl',
-                    size: 'lg'
+                    size: 'lg',
+                    resolve: {
+                        caze: function() {
+                            return angular.copy($scope.caze);
+                        }
+                    }
                 });
 
                 modalInstance.result.then(function() {
@@ -213,15 +232,42 @@
             };
 
             $scope.mergeCase = function() {
-                $uibModal.open({
+                var caseModal = $uibModal.open({
                     templateUrl: 'views/partials/case/case.merge.html',
                     controller: 'CaseMergeModalCtrl',
                     controllerAs: 'dialog',
                     size: 'lg',
                     resolve: {
-                        caze: function() {
+                        source: function() {
                             return $scope.caze;
+                        },
+                        title: function() {
+                            return 'Merge Case #' + $scope.caze.caseId;
+                        },
+                        prompt: function() {
+                            return '#' + $scope.caze.caseId + ': ' + $scope.caze.title;
                         }
+                    }
+                });
+
+                caseModal.result.then(function(selectedCase) {
+                    CaseSrv.merge({}, {
+                        caseId: $scope.caze.id,
+                        mergedCaseId: selectedCase.id
+                    }, function (merged) {
+
+                        $state.go('app.case.details', {
+                            caseId: merged.id
+                        });
+
+                        NotificationSrv.log('The cases have been successfully merged into a new case #' + merged.caseId, 'success');
+                    }, function (response) {
+                        //this.pendingAsync = false;
+                        NotificationSrv.error('Case Merge', response.data, response.status);
+                    });
+                }).catch(function(err) {
+                    if(err && !_.isString(err)) {
+                        NotificationSrv.error('Case Merge', err.data, err.status);
                     }
                 });
             };
@@ -274,10 +320,38 @@
               })
               .catch(function(err) {
                   if(err && !_.isString(err)) {
-                      NotificationSrv.error('caseDetails', response.data, response.status);
+                      NotificationSrv.error('caseDetails', err.data, err.status);
                   }
               });
-            }
+            };
+
+            $scope.getCaseResponders = function(force) {
+                if(!force && $scope.caseResponders !== null) {
+                   return;
+                }
+
+                $scope.caseResponders = null;
+                CortexSrv.getResponders('case', $scope.caseId)
+                    .then(function(responders){
+                        $scope.caseResponders = responders;
+                        return CortexSrv.promntForResponder(responders);
+                    })
+                    .then(function(response) {
+                        if(response && _.isString(response)) {
+                            NotificationSrv.log(response, 'warning');
+                        } else {
+                            return CortexSrv.runResponder(response.id, response.name, 'case', _.pick($scope.caze, 'id', 'tlp', 'pap'));
+                        }
+                    })
+                    .then(function(response){
+                        NotificationSrv.log(['Responder', response.data.responderName, 'started successfully on case', $scope.caze.title].join(' '), 'success');
+                    })
+                    .catch(function(err) {
+                        if(err && !_.isString(err)) {
+                            NotificationSrv.error('caseDetails', err.data, err.status);
+                        }
+                    });
+            };
 
             /**
              * A workaround filter to make sure the ngRepeat doesn't order the
@@ -288,6 +362,10 @@
                     return [];
                 }
                 return Object.keys(obj);
+            };
+
+            $scope.keys = function(obj) {
+                return _.keys(obj);
             };
 
             $scope.getTags = function(selection) {

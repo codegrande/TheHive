@@ -1,21 +1,21 @@
 (function() {
     'use strict';
     angular.module('theHiveServices')
-        .factory('UtilsSrv', function() {
+        .factory('UtilsSrv', function($location) {
             var sensitiveTypes = ['url', 'ip', 'mail', 'domain', 'filename'];
 
-            var service =  {
-                guid: function () {
-                  function s4() {
-                    return Math.floor((1 + Math.random()) * 0x10000)
-                      .toString(16)
-                      .substring(1);
-                  }
-                  return s4() + s4() + '-' + s4() + '-' + s4() + '-' +
-                    s4() + '-' + s4() + s4() + s4();
+            var service = {
+                guid: function() {
+                    function s4() {
+                        return Math.floor((1 + Math.random()) * 0x10000)
+                            .toString(16)
+                            .substring(1);
+                    }
+                    return s4() + s4() + '-' + s4() + '-' + s4() + '-' +
+                        s4() + '-' + s4() + s4() + s4();
                 },
                 objectify: function(arr, property) {
-                    return _.map(arr, function(str){
+                    return _.map(arr, function(str) {
                         var obj = {};
                         obj[property] = str;
                         return obj;

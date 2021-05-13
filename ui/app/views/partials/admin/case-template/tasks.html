@@ -7,7 +7,7 @@
     </h4>
 
     <div class="empty-message" ng-if="!$vm.template.tasks || $vm.template.tasks.length === 0">
-        No tasks have been specified.
+        No tasks have been specified. <a href class="mr-xxxs" ng-click="$vm.addTask()">Add a task</a>
     </div>
 
     <div ng-if="$vm.template.tasks.length !== 0" ui-sortable="$vm.sortableOptions" ng-model="$vm.template.tasks">
@@ -21,7 +21,7 @@
                         <i class="fa" ng-class="{'fa-caret-down': isCollapsed, 'fa-caret-up': !isCollapsed}"></i>
                     </a>
                 </span>
-                <span class="hpad5">{{t.title}}</span>
+                <span class="hpad5">[{{t.group || 'default'}}] {{t.title}}</span>
                 <span class="mr-xxs" ng-if="t.owner">(Assigned to <em>{{$vm.getUserInfo.get(t.owner) | getField:'name'}}</em>)</span>
 
                 <span class="pull-right">
@@ -33,7 +33,7 @@
                 </span>
             </div>
             <div class="panel-body" ng-hide="isCollapsed">
-                <p btf-markdown="t.description" ng-show="t.description != ''"></p>
+                <p marked="t.description" ng-show="t.description != ''"></p>
                 <p class="text-warning" ng-show="!t.description || t.description===''">
                     <em>No description specified</em>
                 </p>

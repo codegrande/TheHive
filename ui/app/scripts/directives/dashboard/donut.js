@@ -1,6 +1,6 @@
 (function() {
     'use strict';
-    angular.module('theHiveDirectives').directive('dashboardDonut', function(StatSrv, $state, DashboardSrv, NotificationSrv) {
+    angular.module('theHiveDirectives').directive('dashboardDonut', function($q, StatSrv, $state, DashboardSrv, NotificationSrv, GlobalSearchSrv) {
         return {
             restrict: 'E',
             scope: {
@@ -81,18 +81,40 @@
                                     names: scope.options.names || {},
                                     colors: scope.options.colors || {},
                                     onclick: function(d) {
-                                        var criteria = [{ _type: scope.options.entity }, { _field: scope.options.field, _value: d.id }];
-
-                                        if (query && query !== '*') {
-                                            criteria.push(query);
+                                        if(scope.mode === 'edit') {
+                                            return;
                                         }
 
-                                        var searchQuery = {
-                                            _and: criteria
+                                        var fieldDef = scope.entity.attributes[scope.options.field];
+
+                                        var data = {
+                                            field: scope.options.field,
+                                            type: fieldDef.type,
+                                            value: GlobalSearchSrv.buildDefaultFilterValue(fieldDef, d)
                                         };
 
-                                        $state.go('app.search', {
-                                            q: Base64.encode(angular.toJson(searchQuery))
+                                        // var filters = (scope.options.filters || []).concat([data]);
+                                        var timeFrameFilter = [];
+                                        if(scope.filter) {
+                                            timeFrameFilter.push({
+                                                field: scope.filter._between._field,
+                                                type: 'date',
+                                                value: {
+                                                    from: moment(scope.filter._between._from),
+                                                    to: moment(scope.filter._between._to)
+                                                }
+                                            });
+                                        }
+
+                                        var filters = (scope.options.filters || [])
+                                            .concat([data])
+                                            .concat(timeFrameFilter);
+
+                                        $q.resolve(GlobalSearchSrv.saveSection(scope.options.entity, {
+                                            search: null,
+                                            filters: filters
+                                        })).then(function() {
+                                            $state.go('app.search');
                                         });
                                     }
                                 },
@@ -106,7 +128,7 @@
                                 }
                             };
                         },
-                        function(err) {
+                        function(/*err*/) {
                             scope.error = true;
                             NotificationSrv.log('Failed to fetch data, please edit the widget definition', 'error');
                         }
